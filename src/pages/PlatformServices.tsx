@@ -1,0 +1,97 @@
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { Navbar } from "@/components/Navbar";
+import { ServiceTypeCard } from "@/components/ServiceTypeCard";
+import { Service, Platform, getServicesByPlatform, getPlatformById, initializeStorage } from "@/lib/localStorage";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
+
+const PlatformServices = () => {
+  const { platformId } = useParams<{ platformId: string }>();
+  const navigate = useNavigate();
+  const [services, setServices] = useState<Service[]>([]);
+  const [platform, setPlatform] = useState<Platform | null>(null);
+
+  useEffect(() => {
+    initializeStorage();
+    if (platformId) {
+      const platformData = getPlatformById(platformId);
+      if (platformData) {
+        setPlatform(platformData);
+        setServices(getServicesByPlatform(platformId));
+      } else {
+        navigate('/');
+      }
+    }
+  }, [platformId, navigate]);
+
+  if (!platform) {
+    return null;
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navbar />
+      
+      {/* Hero Section */}
+      <section className="py-12 px-4 bg-gradient-to-b from-primary/5 to-background">
+        <div className="container mx-auto max-w-6xl">
+          <Button 
+            variant="ghost" 
+            onClick={() => navigate('/')}
+            className="mb-6 gap-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Platforms
+          </Button>
+          
+          <div className="flex items-center gap-6 animate-fade-in">
+            <div className="w-24 h-24 rounded-2xl overflow-hidden shadow-lg">
+              <img 
+                src={platform.image} 
+                alt={platform.name}
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div>
+              <h1 className="text-4xl md:text-5xl font-heading font-bold text-foreground mb-2">
+                {platform.name} Services
+              </h1>
+              <p className="text-xl text-muted-foreground">
+                {platform.description}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Services Grid */}
+      <section className="py-16 px-4">
+        <div className="container mx-auto max-w-7xl">
+          <h2 className="text-2xl font-heading font-bold text-foreground mb-8">
+            Available Services
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {services.map((service, index) => (
+              <div 
+                key={service.id} 
+                className="animate-slide-up"
+                style={{ animationDelay: `${index * 0.1}s` }}
+              >
+                <ServiceTypeCard service={service} />
+              </div>
+            ))}
+          </div>
+
+          {services.length === 0 && (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground text-lg">No services available for this platform yet.</p>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+};
+
+export default PlatformServices;

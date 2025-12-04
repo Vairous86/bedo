@@ -1,0 +1,80 @@
+import { Link, useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { ShoppingBag, Settings, Sun, Moon } from "lucide-react";
+import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
+import { useCurrency } from "@/contexts/CurrencyContext";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Currency } from "@/lib/localStorage";
+
+export const Navbar = () => {
+  const navigate = useNavigate();
+  const { currency, setCurrency } = useCurrency();
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  // Avoid hydration mismatch from next-themes
+  useEffect(() => setMounted(true), []);
+
+  return (
+    <nav className="border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
+      <div className="container mx-auto px-4">
+        <div className="flex h-16 items-center justify-between">
+          <Link to="/" className="flex items-center gap-2 group">
+            <ShoppingBag className="w-8 h-8 text-primary group-hover:scale-110 transition-transform" />
+            <span className="text-2xl font-heading font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+              SocialBoost
+            </span>
+          </Link>
+
+          <div className="flex items-center gap-4">
+            {/* Theme toggle - cycles between dark and light (system can be chosen via other UI if needed) */}
+            {mounted && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label="Toggle theme"
+              >
+                {theme === "dark" ? (
+                  <Sun className="w-5 h-5" />
+                ) : (
+                  <Moon className="w-5 h-5" />
+                )}
+              </Button>
+            )}
+            <Select
+              value={currency}
+              onValueChange={(value) => setCurrency(value as Currency)}
+            >
+              <SelectTrigger className="w-24">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="SAR">SAR</SelectItem>
+                <SelectItem value="EGP">EGP</SelectItem>
+                <SelectItem value="USD">USD</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate("/admin")}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <Settings className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    </nav>
+  );
+};

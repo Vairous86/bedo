@@ -1,0 +1,286 @@
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { Navbar } from "@/components/Navbar";
+import {
+  Service,
+  getServiceById,
+  initializeStorage,
+  getPackagesByService,
+  addAnalyticsEvent,
+} from "@/lib/localStorage";
+import { useCurrency } from "@/contexts/CurrencyContext";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArrowLeft, Clock, Shield, CreditCard } from "lucide-react";
+import { z } from "zod";
+
+const orderSchema = z.object({
+  accountUrl: z.string().url({ message: "Please enter a valid URL" }),
+  quantity: z
+    .number()
+    .min(100, { message: "Minimum quantity is 100" })
+    .max(100000, { message: "Maximum quantity is 100,000" }),
+  whatsappNumber: z
+    .string()
+    .min(10, { message: "Please enter a valid WhatsApp number" })
+    .max(15, { message: "Phone number too long" }),
+});
+
+const ServiceOrder = () => {
+  const { serviceId } = useParams<{ serviceId: string }>();
+  const navigate = useNavigate();
+  const { currency, symbol } = useCurrency();
+  const [service, setService] = useState<Service | null>(null);
+  const [formData, setFormData] = useState({
+    accountUrl: "",
+    quantity: 1000,
+    whatsappNumber: "",
+  });
+  const [packages, setPackages] = useState<any[]>([]);
+  const [selectedPackageId, setSelectedPackageId] = useState<string | null>(
+    null
+  );
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    initializeStorage();
+    if (serviceId) {
+      const serviceData = getServiceById(serviceId);
+      if (serviceData) {
+        setService(serviceData);
+        setPackages(getPackagesByService(serviceData.id));
+        const pk = getPackagesByService(serviceData.id)[0];
+        if (pk) setSelectedPackageId(pk.id);
+      } else {
+        navigate("/");
+      }
+    }
+  }, [serviceId, navigate]);
+
+  if (!service) {
+    return null;
+  }
+
+  const pricePerThousand = service.prices[currency];
+  const selectedPackage = packages.find((p) => p.id === selectedPackageId);
+  const selectedPrice = selectedPackage
+    ? selectedPackage.price[currency]
+    : (formData.quantity / 1000) * pricePerThousand;
+  const totalPrice = selectedPrice;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrors({});
+
+    try {
+      orderSchema.parse({
+        accountUrl: formData.accountUrl,
+        quantity: formData.quantity,
+        whatsappNumber: formData.whatsappNumber,
+      });
+
+      // Require a selected package
+      if (!selectedPackage) {
+        setErrors({ quantity: "Please select a package" });
+        return;
+      }
+
+      // If a package is selected, proceed to payment with that package as the cart
+      if (selectedPackage) {
+        const item = {
+          packageId: selectedPackage.id,
+          serviceId: service.id,
+          units: selectedPackage.units,
+          price: selectedPackage.price[currency],
+        };
+        addAnalyticsEvent({
+          type: "add_to_cart",
+          serviceId: service.id,
+          meta: item,
+        });
+        navigate("/payment", {
+          state: {
+            serviceId: service.id,
+            cart: [item],
+            accountUrl: formData.accountUrl,
+            whatsappNumber: formData.whatsappNumber,
+            currency,
+          },
+        });
+        return;
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const newErrors: Record<string, string> = {};
+        error.errors.forEach((err) => {
+          if (err.path[0]) {
+            newErrors[err.path[0] as string] = err.message;
+          }
+        });
+        setErrors(newErrors);
+      }
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navbar />
+
+      <section className="py-12 px-4">
+        <div className="container mx-auto max-w-6xl">
+          <Button
+            variant="ghost"
+            onClick={() => navigate(`/platform/${service.platform}`)}
+            className="mb-6 gap-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Services
+          </Button>
+
+          <div className="grid lg:grid-cols-2 gap-8">
+            {/* Left Side - Service Image */}
+            <div className="animate-fade-in">
+              <div className="aspect-video rounded-2xl overflow-hidden shadow-lg mb-6">
+                <img
+                  src={service.image}
+                  alt={service.title}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+
+              <Card className="gradient-card">
+                <CardHeader>
+                  <CardTitle className="text-xl font-heading">
+                    {service.title}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-muted-foreground">
+                    {service.fullDescription}
+                  </p>
+
+                  <div className="flex items-center gap-4 pt-4 border-t border-border">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Clock className="w-4 h-4 text-primary" />
+                      <span className="text-muted-foreground">
+                        {service.deliveryTime}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <Shield className="w-4 h-4 text-primary" />
+                      <span className="text-muted-foreground">
+                        {service.guarantee}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Right Side - Order Form */}
+            <div className="animate-slide-up">
+              <Card className="gradient-card shadow-card">
+                <CardHeader>
+                  <CardTitle className="text-2xl font-heading flex items-center gap-2">
+                    <CreditCard className="w-6 h-6 text-primary" />
+                    Place Your Order
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleSubmit} className="space-y-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="accountUrl">Account / Post URL *</Label>
+                      <Input
+                        id="accountUrl"
+                        type="url"
+                        placeholder="https://instagram.com/your-profile"
+                        value={formData.accountUrl}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            accountUrl: e.target.value,
+                          })
+                        }
+                        className={
+                          errors.accountUrl ? "border-destructive" : ""
+                        }
+                      />
+                      {errors.accountUrl && (
+                        <p className="text-destructive text-sm">
+                          {errors.accountUrl}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="package">Choose a package *</Label>
+                      <select
+                        id="package"
+                        value={selectedPackageId || ""}
+                        onChange={(e) => setSelectedPackageId(e.target.value)}
+                        className={`w-full h-12 px-3 rounded border border-border bg-transparent ${
+                          errors.quantity ? "border-destructive" : ""
+                        }`}
+                      >
+                        {packages.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.units.toLocaleString()} {service.serviceType} — {symbol}
+                            {p.price[currency]?.toFixed(2)}{p.label ? ` — ${p.label}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      {packages.length === 0 && (
+                        <p className="text-sm text-muted-foreground">
+                          No predefined packages available for this service.
+                          Admin can add packages in the dashboard.
+                        </p>
+                      )}
+                      <p className="text-sm text-muted-foreground">
+                        Price shown is adjusted to your currency.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="whatsappNumber">WhatsApp Number *</Label>
+                      <Input
+                        id="whatsappNumber"
+                        type="tel"
+                        placeholder="+966 5XX XXX XXXX"
+                        value={formData.whatsappNumber}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            whatsappNumber: e.target.value,
+                          })
+                        }
+                        className={
+                          errors.whatsappNumber ? "border-destructive" : ""
+                        }
+                      />
+                      {errors.whatsappNumber && (
+                        <p className="text-destructive text-sm">
+                          {errors.whatsappNumber}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <Button type="submit" className="w-full h-12 bg-primary">
+                        Proceed to Payment
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+};
+
+export default ServiceOrder;

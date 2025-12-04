@@ -1,0 +1,824 @@
+import { useState, useEffect } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import {
+  Service,
+  Order,
+  PaymentSettings,
+  getServices,
+  addService,
+  updateService,
+  deleteService,
+  getOrders,
+  updateOrderStatus,
+  getPaymentSettings,
+  updatePaymentSettings,
+  getPlatforms,
+  getAllPackages,
+  getPackagesByService,
+  addPackage,
+  updatePackage,
+  deletePackage,
+  getMostRequested,
+  setMostRequested,
+} from "@/lib/localStorage";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  LogOut,
+  ShoppingBag,
+  CheckCircle,
+  XCircle,
+  Clock,
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+const AdminDashboard = () => {
+  const [services, setServices] = useState<Service[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>({
+    stcPayNumber: "",
+    alRajhiAccount: "",
+    vodafoneCash: "",
+  });
+  const [editingService, setEditingService] = useState<Service | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    title: "",
+    description: "",
+    fullDescription: "",
+    priceSAR: "",
+    priceEGP: "",
+    priceUSD: "",
+    deliveryTime: "",
+    guarantee: "",
+    image: "",
+    platform: "",
+    serviceType: "",
+  });
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const platforms = getPlatforms();
+  const [packages, setPackages] = useState<any[]>([]);
+  const [mostRequested, setMostRequestedState] = useState(getMostRequested());
+
+  useEffect(() => {
+    const isLoggedIn = sessionStorage.getItem("admin_logged_in");
+    if (!isLoggedIn) {
+      navigate("/admin");
+    } else {
+      loadData();
+      loadPackages();
+    }
+  }, [navigate]);
+
+  const loadData = () => {
+    setServices(getServices());
+    setOrders(getOrders());
+    setPaymentSettings(getPaymentSettings());
+  };
+  const loadPackages = () => {
+    setPackages(getAllPackages());
+    setMostRequestedState(getMostRequested());
+  };
+  const handleLogout = () => {
+    sessionStorage.removeItem("admin_logged_in");
+    navigate("/admin");
+  };
+
+  const openAddDialog = () => {
+    setEditingService(null);
+    setFormData({
+      title: "",
+      description: "",
+      fullDescription: "",
+      priceSAR: "",
+      priceEGP: "",
+      priceUSD: "",
+      deliveryTime: "",
+      guarantee: "",
+      image: "",
+      platform: "",
+      serviceType: "",
+    });
+    setDialogOpen(true);
+  };
+
+  const openEditDialog = (service: Service) => {
+    setEditingService(service);
+    setFormData({
+      title: service.title,
+      description: service.description,
+      fullDescription: service.fullDescription,
+      priceSAR: service.prices.SAR.toString(),
+      priceEGP: service.prices.EGP.toString(),
+      priceUSD: service.prices.USD.toString(),
+      deliveryTime: service.deliveryTime,
+      guarantee: service.guarantee,
+      image: service.image,
+      platform: service.platform,
+      serviceType: service.serviceType,
+    });
+    setDialogOpen(true);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const serviceData = {
+      title: formData.title,
+      description: formData.description,
+      fullDescription: formData.fullDescription,
+      prices: {
+        SAR: parseFloat(formData.priceSAR),
+        EGP: parseFloat(formData.priceEGP),
+        USD: parseFloat(formData.priceUSD),
+      },
+      deliveryTime: formData.deliveryTime,
+      guarantee: formData.guarantee,
+      image: formData.image,
+      platform: formData.platform,
+      serviceType: formData.serviceType,
+    };
+    if (editingService) {
+      updateService(editingService.id, serviceData);
+      toast({ title: "Service Updated" });
+    } else {
+      addService(serviceData);
+      toast({ title: "Service Added" });
+    }
+    setDialogOpen(false);
+    loadData();
+  };
+
+  const handleDelete = (id: string) => {
+    if (window.confirm("Delete this service?")) {
+      deleteService(id);
+      toast({ title: "Deleted" });
+      loadData();
+    }
+  };
+  const handleAddPackage = (serviceId: string) => {
+    const units = parseInt(prompt("Units (e.g. 100, 500, 1000)") || "100");
+    const priceSAR = parseFloat(prompt("Price SAR") || "0");
+    const priceEGP = parseFloat(prompt("Price EGP") || "0");
+    const priceUSD = parseFloat(prompt("Price USD") || "0");
+    const label = prompt("Optional label (e.g. Recommended)") || "";
+    const visible = confirm("Should this package be visible to customers? OK = Yes")
+      ? true
+      : false;
+    if (!units || (!priceSAR && !priceEGP && !priceUSD))
+      return toast({ title: "Invalid input" });
+    addPackage({
+      serviceId,
+      units,
+      price: { SAR: priceSAR, EGP: priceEGP, USD: priceUSD },
+      visible,
+      label,
+      description: "",
+    });
+    toast({ title: "Package added" });
+    loadPackages();
+  };
+
+  const handleDeletePackage = (id: string) => {
+    if (window.confirm("Delete this package?")) {
+      deletePackage(id);
+      toast({ title: "Package deleted" });
+      loadPackages();
+    }
+  };
+
+  const handleEditPackage = (id: string) => {
+    const all = getAllPackages();
+    const p = all.find((x) => x.id === id);
+    if (!p) return;
+    const units = parseInt(prompt("Units", p.units.toString()) || p.units.toString());
+    const priceSAR = parseFloat(
+      prompt("Price SAR", p.price.SAR.toString()) || p.price.SAR.toString()
+    );
+    const priceEGP = parseFloat(
+      prompt("Price EGP", p.price.EGP.toString()) || p.price.EGP.toString()
+    );
+    const priceUSD = parseFloat(
+      prompt("Price USD", p.price.USD.toString()) || p.price.USD.toString()
+    );
+    const label = prompt("Optional label", p.label || "") || "";
+    const visible = confirm("Visible to customers? OK = Yes") ? true : false;
+    updatePackage(id, {
+      units,
+      price: { SAR: priceSAR, EGP: priceEGP, USD: priceUSD },
+      label,
+      visible,
+    });
+    toast({ title: "Package updated" });
+    loadPackages();
+  };
+
+  // Drag & drop reordering support
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    e.dataTransfer.setData("text/plain", id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDropOnPackage = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    const draggedId = e.dataTransfer.getData("text/plain");
+    if (!draggedId || draggedId === targetId) return;
+    const all = getAllPackages();
+    const dragged = all.find((x) => x.id === draggedId);
+    const target = all.find((x) => x.id === targetId);
+    if (!dragged || !target) return;
+    // swap orderIndex
+    const di = dragged.orderIndex ?? dragged.units;
+    const ti = target.orderIndex ?? target.units;
+    updatePackage(dragged.id, { orderIndex: ti });
+    updatePackage(target.id, { orderIndex: di });
+    toast({ title: "Package order updated" });
+    loadPackages();
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const movePackage = (id: string, dir: number) => {
+    const all = getAllPackages().filter((p) => p.serviceId === id || true);
+    // For simplicity, operate on the service-specific list when invoked via buttons below
+  };
+
+  const handleToggleMost = (serviceId: string) => {
+    const list = getMostRequested();
+    const found = list.find((l) => l.serviceId === serviceId);
+    if (found) {
+      found.visible = !found.visible;
+    } else {
+      list.push({ serviceId, visible: true });
+    }
+    setMostRequested(list);
+    setMostRequestedState(list);
+    toast({ title: "Most Requested updated" });
+  };
+
+  const moveMost = (index: number, dir: number) => {
+    const list = [...getMostRequested()];
+    const newIndex = index + dir;
+    if (newIndex < 0 || newIndex >= list.length) return;
+    const tmp = list[newIndex];
+    list[newIndex] = list[index];
+    list[index] = tmp;
+    setMostRequested(list);
+    setMostRequestedState(list);
+    toast({ title: "Order updated" });
+  };
+  const handleOrderStatusChange = (
+    orderId: string,
+    status: Order["status"]
+  ) => {
+    updateOrderStatus(orderId, status);
+    toast({ title: "Order Updated" });
+    loadData();
+  };
+  const handlePaymentSettingsUpdate = (e: React.FormEvent) => {
+    e.preventDefault();
+    updatePaymentSettings(paymentSettings);
+    toast({ title: "Settings Saved" });
+  };
+
+  const getStatusBadge = (status: Order["status"]) => {
+    const styles = {
+      pending: "bg-yellow-500/10 text-yellow-600",
+      confirmed: "bg-blue-500/10 text-blue-600",
+      completed: "bg-green-500/10 text-green-600",
+      cancelled: "bg-red-500/10 text-red-600",
+    };
+    return (
+      <Badge variant="outline" className={styles[status]}>
+        {status}
+      </Badge>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <nav className="border-b border-border/40 bg-background/95 backdrop-blur sticky top-0 z-50">
+        <div className="container mx-auto px-4 flex h-16 items-center justify-between">
+          <Link to="/" className="flex items-center gap-2">
+            <ShoppingBag className="w-8 h-8 text-primary" />
+            <span className="text-2xl font-heading font-bold text-primary">
+              Admin Panel
+            </span>
+          </Link>
+          <Button onClick={handleLogout} variant="outline" className="gap-2">
+            <LogOut className="w-4 h-4" />
+            Logout
+          </Button>
+        </div>
+      </nav>
+
+      <div className="container mx-auto px-4 py-8">
+        <Tabs defaultValue="services" className="space-y-6">
+          <TabsList className="grid w-full max-w-md grid-cols-4">
+            <TabsTrigger value="services">Services</TabsTrigger>
+            <TabsTrigger value="orders">Orders</TabsTrigger>
+            <TabsTrigger value="settings">Settings</TabsTrigger>
+            <TabsTrigger value="manage">Manage</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="services" className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h1 className="text-3xl font-heading font-bold">Services</h1>
+              <Button onClick={openAddDialog} className="gap-2">
+                <Plus className="w-4 h-4" />
+                Add Service
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {services.map((service) => (
+                <Card key={service.id}>
+                  <CardHeader>
+                    <img
+                      src={service.image}
+                      alt={service.title}
+                      className="aspect-video w-full rounded-lg object-cover mb-3"
+                    />
+                    <div className="flex gap-2 mb-2">
+                      <Badge>{service.platform}</Badge>
+                      <Badge variant="outline">{service.serviceType}</Badge>
+                    </div>
+                    <CardTitle className="text-lg">{service.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-sm space-y-1 mb-4">
+                      <div className="flex justify-between">
+                        <span>SAR:</span>
+                        <span className="font-bold">{service.prices.SAR}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>EGP:</span>
+                        <span className="font-bold">{service.prices.EGP}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>USD:</span>
+                        <span className="font-bold">${service.prices.USD}</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => openEditDialog(service)}
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        onClick={() => handleDelete(service.id)}
+                        variant="destructive"
+                        size="sm"
+                        className="flex-1"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="manage" className="space-y-6">
+            <h2 className="text-2xl font-heading font-bold">
+              Packages & Most Requested
+            </h2>
+            <p className="text-muted-foreground">
+              Manage packages per service and select services for the "Most
+              Requested" hero section.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h3 className="font-semibold mb-3">Services</h3>
+                {services.map((s) => (
+                  <Card key={s.id} className="mb-3">
+                    <CardHeader>
+                      <CardTitle className="text-lg">{s.title}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-sm text-muted-foreground">
+                          {s.platform}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleAddPackage(s.id)}
+                          >
+                            Add Package
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleToggleMost(s.id)}
+                          >
+                            {mostRequested.find(
+                              (m) => m.serviceId === s.id && m.visible
+                            )
+                              ? "Unfeature"
+                              : "Feature"}
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {packages
+                          .filter((p) => p.serviceId === s.id)
+                          .sort((a, b) => (a.orderIndex ?? a.units) - (b.orderIndex ?? b.units))
+                          .map((p) => (
+                            <div
+                              key={p.id}
+                              className="flex items-center justify-between text-sm p-2 rounded border border-border"
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, p.id)}
+                              onDragOver={handleDragOver}
+                              onDrop={(e) => handleDropOnPackage(e, p.id)}
+                            >
+                              <div>
+                                <div className="font-medium">
+                                  {p.units.toLocaleString()} {" "}
+                                  {p.label ? `— ${p.label}` : ""}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  SAR {p.price.SAR} / EGP {p.price.EGP} / USD {p.price.USD}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button variant="ghost" size="icon" onClick={() => handleEditPackage(p.id)}>
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    updatePackage(p.id, { visible: !p.visible });
+                                    toast({ title: p.visible ? "Hidden" : "Visible" });
+                                    loadPackages();
+                                  }}
+                                >
+                                  {p.visible ? "Hide" : "Show"}
+                                </Button>
+                                <Button variant="destructive" size="icon" onClick={() => handleDeletePackage(p.id)}>
+                                  Del
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-3">Most Requested Order</h3>
+                <div className="space-y-2">
+                  {mostRequested.map((m, idx) => {
+                    const svc = services.find((s) => s.id === m.serviceId);
+                    if (!svc) return null;
+                    return (
+                      <div
+                        key={m.serviceId}
+                        className="flex items-center justify-between p-2 rounded border border-border"
+                      >
+                        <div>
+                          <div className="font-medium">{svc.title}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {m.visible ? "Visible" : "Hidden"}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => moveMost(idx, -1)}
+                          >
+                            ↑
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => moveMost(idx, 1)}
+                          >
+                            ↓
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => handleToggleMost(m.serviceId)}
+                          >
+                            {m.visible ? "Hide" : "Show"}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="orders" className="space-y-6">
+            <h1 className="text-3xl font-heading font-bold">Orders</h1>
+            {orders.length === 0 ? (
+              <p className="text-muted-foreground">No orders yet.</p>
+            ) : (
+              orders.map((order) => (
+                <Card key={order.id}>
+                  <CardContent className="p-6 flex flex-col md:flex-row justify-between gap-4">
+                    <div>
+                      <p className="font-bold">
+                        {order.serviceName} {getStatusBadge(order.status)}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Qty: {order.quantity} | {order.currency}{" "}
+                        {order.price.toFixed(2)}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        WhatsApp: {order.whatsappNumber}
+                      </p>
+                    </div>
+                    <Select
+                      value={order.status}
+                      onValueChange={(v) =>
+                        handleOrderStatusChange(order.id, v as Order["status"])
+                      }
+                    >
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="confirmed">Confirmed</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </TabsContent>
+
+          <TabsContent value="settings">
+            <Card className="max-w-xl">
+              <CardHeader>
+                <CardTitle>Payment Settings</CardTitle>
+                <CardDescription>
+                  Configure payment methods for different regions
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form
+                  onSubmit={handlePaymentSettingsUpdate}
+                  className="space-y-4"
+                >
+                  <h3 className="font-semibold text-sm text-muted-foreground">
+                    Saudi Arabia
+                  </h3>
+                  <div className="space-y-2">
+                    <Label>STC Pay Number</Label>
+                    <Input
+                      value={paymentSettings.stcPayNumber}
+                      onChange={(e) =>
+                        setPaymentSettings({
+                          ...paymentSettings,
+                          stcPayNumber: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Al Rajhi Account</Label>
+                    <Input
+                      value={paymentSettings.alRajhiAccount}
+                      onChange={(e) =>
+                        setPaymentSettings({
+                          ...paymentSettings,
+                          alRajhiAccount: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <h3 className="font-semibold text-sm text-muted-foreground pt-4">
+                    Egypt
+                  </h3>
+                  <div className="space-y-2">
+                    <Label>Vodafone Cash Number</Label>
+                    <Input
+                      value={paymentSettings.vodafoneCash}
+                      onChange={(e) =>
+                        setPaymentSettings({
+                          ...paymentSettings,
+                          vodafoneCash: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <Button type="submit" className="mt-4">
+                    Save Settings
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingService ? "Edit" : "Add"} Service</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Title</Label>
+                <Input
+                  value={formData.title}
+                  onChange={(e) =>
+                    setFormData({ ...formData, title: e.target.value })
+                  }
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Platform</Label>
+                <Select
+                  value={formData.platform}
+                  onValueChange={(v) =>
+                    setFormData({ ...formData, platform: v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {platforms.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Service Type</Label>
+                <Input
+                  value={formData.serviceType}
+                  onChange={(e) =>
+                    setFormData({ ...formData, serviceType: e.target.value })
+                  }
+                  placeholder="Likes, Followers, Views"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Image URL</Label>
+                <Input
+                  value={formData.image}
+                  onChange={(e) =>
+                    setFormData({ ...formData, image: e.target.value })
+                  }
+                  required
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Short Description</Label>
+              <Textarea
+                value={formData.description}
+                onChange={(e) =>
+                  setFormData({ ...formData, description: e.target.value })
+                }
+                rows={2}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Full Description</Label>
+              <Textarea
+                value={formData.fullDescription}
+                onChange={(e) =>
+                  setFormData({ ...formData, fullDescription: e.target.value })
+                }
+                rows={3}
+                required
+              />
+            </div>
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Price SAR/1000</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={formData.priceSAR}
+                  onChange={(e) =>
+                    setFormData({ ...formData, priceSAR: e.target.value })
+                  }
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Price EGP/1000</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={formData.priceEGP}
+                  onChange={(e) =>
+                    setFormData({ ...formData, priceEGP: e.target.value })
+                  }
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Price USD/1000</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={formData.priceUSD}
+                  onChange={(e) =>
+                    setFormData({ ...formData, priceUSD: e.target.value })
+                  }
+                  required
+                />
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Delivery Time</Label>
+                <Input
+                  value={formData.deliveryTime}
+                  onChange={(e) =>
+                    setFormData({ ...formData, deliveryTime: e.target.value })
+                  }
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Guarantee</Label>
+                <Input
+                  value={formData.guarantee}
+                  onChange={(e) =>
+                    setFormData({ ...formData, guarantee: e.target.value })
+                  }
+                  required
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 pt-4">
+              <Button type="submit" className="flex-1">
+                {editingService ? "Update" : "Add"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDialogOpen(false)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default AdminDashboard;

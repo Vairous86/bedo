@@ -1,0 +1,466 @@
+import { useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Navbar } from "@/components/Navbar";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  getPaymentSettings,
+  addOrder,
+  getCurrencySymbol,
+  Currency,
+  getServiceById,
+  getOrders,
+} from "@/lib/localStorage";
+import { useToast } from "@/hooks/use-toast";
+import {
+  ArrowLeft,
+  Upload,
+  CheckCircle,
+  CreditCard,
+  Smartphone,
+} from "lucide-react";
+
+interface OrderData {
+  serviceId?: string;
+  serviceName?: string;
+  platform?: string;
+  accountUrl?: string;
+  quantity?: number;
+  whatsappNumber?: string;
+  price?: number;
+  currency?: Currency;
+  // optional cart
+  cart?: Array<{
+    packageId: string;
+    serviceId: string;
+    units: number;
+    price: number;
+  }>;
+}
+
+const Payment = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [orderData, setOrderData] = useState<OrderData | null>(null);
+  const [noState, setNoState] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<
+    "stcpay" | "alrajhi" | "vodafone"
+  >("stcpay");
+  const [screenshot, setScreenshot] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const paymentSettings = getPaymentSettings();
+
+  useEffect(() => {
+    if (location.state) {
+      const data = location.state as OrderData;
+      // If cart exists and serviceName not provided, try to fetch name for first item
+      if ((data as any).cart && Array.isArray((data as any).cart)) {
+        const cart = (data as any).cart as Array<any>;
+        if (!data.serviceName && cart.length > 0) {
+          const svc = getServiceById(cart[0].serviceId);
+          data.serviceName = svc ? svc.title : "Multiple Services";
+        }
+      }
+      setOrderData(data);
+      // Set default payment method based on currency
+      if (data.currency === "EGP") {
+        setPaymentMethod("vodafone");
+      } else {
+        setPaymentMethod("stcpay");
+      }
+    } else {
+      // If user navigated directly, try to prefill using the last order in storage
+      const orders = getOrders();
+      const last = orders.length ? orders[orders.length - 1] : null;
+      if (last) {
+        setOrderData({
+          serviceId: last.serviceId,
+          serviceName: last.serviceName,
+          platform: last.platform,
+          accountUrl: last.accountUrl,
+          quantity: last.quantity,
+          whatsappNumber: last.whatsappNumber,
+          price: last.price,
+          currency: last.currency as Currency,
+        });
+        // set default payment method based on currency
+        if (last.currency === "EGP") setPaymentMethod("vodafone");
+        else setPaymentMethod("stcpay");
+      } else {
+        // No order context — render helpful page instead of redirecting
+        setNoState(true);
+      }
+    }
+  }, [location.state, navigate]);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setScreenshot(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleConfirm = () => {
+    if (!orderData) return;
+
+    if (!screenshot) {
+      toast({
+        title: "Screenshot Required",
+        description: "Please upload a screenshot of your payment transfer.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    // Add order(s) to localStorage. If a cart is present, create one order per cart item.
+    if (orderData.cart && orderData.cart.length > 0) {
+      orderData.cart.forEach((ci) => {
+        const svc = getServiceById(ci.serviceId);
+        addOrder({
+          serviceId: ci.serviceId,
+          serviceName: svc ? svc.title : "Service",
+          platform: svc ? svc.platform : "",
+          accountUrl: orderData.accountUrl || "",
+          quantity: ci.units,
+          whatsappNumber: orderData.whatsappNumber || "",
+          price: ci.price,
+          currency: orderData.currency || "USD",
+          paymentMethod: paymentMethod,
+          paymentScreenshot: screenshot,
+          status: "pending",
+        });
+      });
+    } else {
+      addOrder({
+        serviceId: orderData.serviceId || "",
+        serviceName: orderData.serviceName || "",
+        platform: orderData.platform || "",
+        accountUrl: orderData.accountUrl || "",
+        quantity: orderData.quantity || 0,
+        whatsappNumber: orderData.whatsappNumber || "",
+        price: orderData.price || 0,
+        currency: orderData.currency || "USD",
+        paymentMethod: paymentMethod,
+        paymentScreenshot: screenshot,
+        status: "pending",
+      });
+    }
+
+    setTimeout(() => {
+      setIsSubmitting(false);
+      toast({
+        title: "Payment Submitted!",
+        description: "Your payment will be confirmed within 30 to 60 minutes.",
+      });
+      navigate("/");
+    }, 1500);
+  };
+
+  if (!orderData) {
+    if (noState) {
+      return (
+        <div className="min-h-screen bg-background">
+          <Navbar />
+          <section className="py-24 px-4">
+            <div className="container mx-auto max-w-2xl text-center">
+              <h2 className="text-2xl font-heading font-bold mb-4">
+                No active order
+              </h2>
+              <p className="text-muted-foreground mb-6">
+                It looks like you visited the payment page directly. Please
+                select a service and package first.
+              </p>
+              <div className="flex gap-3 justify-center">
+                <a
+                  href="/"
+                  className="inline-block px-4 py-2 rounded bg-primary text-primary-foreground"
+                >
+                  Go to Home
+                </a>
+                <a
+                  href="/"
+                  className="inline-block px-4 py-2 rounded border border-border"
+                >
+                  Browse Services
+                </a>
+              </div>
+            </div>
+          </section>
+        </div>
+      );
+    }
+    return null;
+  }
+
+  const symbol = getCurrencySymbol(orderData.currency);
+
+  // If this orderData contains a cart, compute display values
+  const displayUnits =
+    orderData.cart && orderData.cart.length > 0
+      ? orderData.cart.reduce((s, it) => s + (it.units || 0), 0)
+      : orderData.quantity || 0;
+
+  const displayPrice =
+    orderData.cart && orderData.cart.length > 0
+      ? orderData.cart.reduce((s, it) => s + (it.price || 0), 0)
+      : orderData.price || 0;
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navbar />
+
+      <section className="py-12 px-4">
+        <div className="container mx-auto max-w-3xl">
+          <Button
+            variant="ghost"
+            onClick={() => navigate(-1)}
+            className="mb-6 gap-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </Button>
+
+          <div className="text-center mb-8 animate-fade-in">
+            <h1 className="text-3xl font-heading font-bold text-foreground mb-2">
+              Complete Your Payment
+            </h1>
+            <p className="text-muted-foreground">
+              Choose your preferred payment method below
+            </p>
+          </div>
+
+          {/* Order Summary */}
+          <Card className="gradient-card mb-6 animate-slide-up">
+            <CardHeader>
+              <CardTitle className="text-lg">Order Summary</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Service:</span>
+                  <span className="font-medium">{orderData.serviceName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Quantity:</span>
+                  <span>{displayUnits.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between pt-2 border-t border-border">
+                  <span className="font-heading font-bold">Total Amount:</span>
+                  <span className="font-heading font-bold text-primary text-lg">
+                    {symbol}
+                    {displayPrice.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Payment Method Selection */}
+          <Card
+            className="gradient-card mb-6 animate-slide-up"
+            style={{ animationDelay: "0.1s" }}
+          >
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-primary" />
+                Select Payment Method
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RadioGroup
+                value={paymentMethod}
+                onValueChange={(value) =>
+                  setPaymentMethod(value as "stcpay" | "alrajhi" | "vodafone")
+                }
+                className="space-y-4"
+              >
+                {orderData.currency === "EGP" ? (
+                  <div
+                    className={`flex items-center space-x-4 p-4 rounded-lg border-2 transition-all cursor-pointer ${
+                      paymentMethod === "vodafone"
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/50"
+                    }`}
+                  >
+                    <RadioGroupItem value="vodafone" id="vodafone" />
+                    <Label
+                      htmlFor="vodafone"
+                      className="flex items-center gap-3 cursor-pointer flex-1"
+                    >
+                      <div className="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center">
+                        <Smartphone className="w-6 h-6 text-red-500" />
+                      </div>
+                      <div>
+                        <div className="font-medium">Vodafone Cash</div>
+                        <div className="text-sm text-muted-foreground">
+                          Mobile wallet payment
+                        </div>
+                      </div>
+                    </Label>
+                  </div>
+                ) : (
+                  <>
+                    <div
+                      className={`flex items-center space-x-4 p-4 rounded-lg border-2 transition-all cursor-pointer ${
+                        paymentMethod === "stcpay"
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      <RadioGroupItem value="stcpay" id="stcpay" />
+                      <Label
+                        htmlFor="stcpay"
+                        className="flex items-center gap-3 cursor-pointer flex-1"
+                      >
+                        <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                          <Smartphone className="w-6 h-6 text-primary" />
+                        </div>
+                        <div>
+                          <div className="font-medium">STC Pay</div>
+                          <div className="text-sm text-muted-foreground">
+                            Mobile wallet payment
+                          </div>
+                        </div>
+                      </Label>
+                    </div>
+
+                    <div
+                      className={`flex items-center space-x-4 p-4 rounded-lg border-2 transition-all cursor-pointer ${
+                        paymentMethod === "alrajhi"
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      <RadioGroupItem value="alrajhi" id="alrajhi" />
+                      <Label
+                        htmlFor="alrajhi"
+                        className="flex items-center gap-3 cursor-pointer flex-1"
+                      >
+                        <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                          <CreditCard className="w-6 h-6 text-primary" />
+                        </div>
+                        <div>
+                          <div className="font-medium">Al Rajhi Bank</div>
+                          <div className="text-sm text-muted-foreground">
+                            Bank transfer
+                          </div>
+                        </div>
+                      </Label>
+                    </div>
+                  </>
+                )}
+              </RadioGroup>
+            </CardContent>
+          </Card>
+
+          {/* Payment Details */}
+          <Card
+            className="gradient-card mb-6 animate-slide-up"
+            style={{ animationDelay: "0.2s" }}
+          >
+            <CardHeader>
+              <CardTitle className="text-lg">Payment Details</CardTitle>
+              <CardDescription>
+                Send the exact amount to the account below
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-4 bg-secondary/50 rounded-lg">
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">
+                      {paymentMethod === "stcpay"
+                        ? "STC Pay Number:"
+                        : paymentMethod === "alrajhi"
+                        ? "Al Rajhi Account:"
+                        : "Vodafone Cash Number:"}
+                    </span>
+                    <span className="font-mono font-bold text-lg">
+                      {paymentMethod === "stcpay"
+                        ? paymentSettings.stcPayNumber
+                        : paymentMethod === "alrajhi"
+                        ? paymentSettings.alRajhiAccount
+                        : paymentSettings.vodafoneCash}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">
+                      Amount to Send:
+                    </span>
+                    <span className="font-heading font-bold text-primary text-xl">
+                      {symbol}
+                      {displayPrice.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Screenshot Upload */}
+              <div className="space-y-2">
+                <Label>Upload Payment Screenshot *</Label>
+                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    id="screenshot-upload"
+                  />
+                  <label htmlFor="screenshot-upload" className="cursor-pointer">
+                    {screenshot ? (
+                      <div className="space-y-2">
+                        <CheckCircle className="w-12 h-12 mx-auto text-green-500" />
+                        <p className="text-sm text-muted-foreground">
+                          Screenshot uploaded
+                        </p>
+                        <img
+                          src={screenshot}
+                          alt="Payment screenshot"
+                          className="max-h-32 mx-auto rounded-lg"
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <Upload className="w-12 h-12 mx-auto text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">
+                          Click to upload payment screenshot
+                        </p>
+                      </div>
+                    )}
+                  </label>
+                </div>
+              </div>
+
+              <Button
+                onClick={handleConfirm}
+                disabled={isSubmitting}
+                className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-lg"
+              >
+                {isSubmitting ? "Processing..." : "Confirm Payment"}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+    </div>
+  );
+};
+
+export default Payment;
